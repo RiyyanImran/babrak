@@ -52,24 +52,27 @@ def log_trade(pair, order_type, amount):
         writer = csv.writer(file)
         writer.writerow([time.strftime("%Y-%m-%d %H:%M:%S"), pair, order_type, amount])
 
-def monitor_and_trade(selected_coins, trade_amount, profit_target, api_key, api_secret):
+def monitor_and_trade(selected_coins, trade_amount, profit_target, query_interval, max_positions, api_key, api_secret):
     buy_prices = {}
-    while True:
+    open_positions = 0
+    while open_positions < max_positions:
         data = get_market_data()
         if not data:
             continue
         for coin in data:
-            if coin["pair"] in selected_coins:
+            if coin["pair"] in selected_coins and open_positions < max_positions:
                 current_price = float(coin["last"])
                 if coin["pair"] not in buy_prices:
                     buy_price = float(coin["average"]) * 0.95  # Simulated buy price
                     execute_trade("BUY", coin["pair"], trade_amount, api_key, api_secret)
                     buy_prices[coin["pair"]] = buy_price
+                    open_positions += 1
                 sell_price = buy_prices[coin["pair"]] * (1 + profit_target / 100)
                 if current_price >= sell_price:
                     execute_trade("SELL", coin["pair"], trade_amount, api_key, api_secret)
                     del buy_prices[coin["pair"]]
-        time.sleep(10)
+                    open_positions -= 1
+        time.sleep(query_interval)
 
 def main():
     st.title("BTC Turk Trading Bot")
@@ -96,9 +99,11 @@ def main():
     elif choice == "Trade Execution":
         trade_amount = st.number_input("Trade Amount", min_value=0.001, step=0.001)
         profit_target = st.number_input("Profit Target (%)", min_value=1.0, step=0.1)
+        query_interval = st.number_input("Query Interval (s)", min_value=1, step=1, value=10)
+        max_positions = st.number_input("Maximum Open Positions", min_value=1, step=1, value=5)
         if st.button("Start Automated Trading"):
             st.success("Automated Trading Started")
-            monitor_and_trade(st.session_state.selected_coins, trade_amount, profit_target, st.session_state.api_key, st.session_state.api_secret)
+            monitor_and_trade(st.session_state.selected_coins, trade_amount, profit_target, query_interval, max_positions, st.session_state.api_key, st.session_state.api_secret)
     elif choice == "Trade History":
         try:
             df = pd.read_csv("trade_history.csv", names=["Timestamp", "Pair", "Order Type", "Amount"])
